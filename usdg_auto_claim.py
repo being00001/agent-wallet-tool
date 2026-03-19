@@ -527,6 +527,7 @@ class ClaimConfig:
     simulate_before_send: bool = True
     max_slippage_bps: int = 100
     min_sol_balance: int = 5_000_000
+    allow_sol_fallback: bool = False
 
     # History
     history_db_path: Optional[str] = None
@@ -1001,7 +1002,16 @@ async def execute_sweep(
                 return result
 
             except ImportError:
-                logger.warning("spl-token not installed; falling back to SOL transfer")
+                result = SweepResult(
+                    success=False,
+                    error=(
+                        "spl-token dependency unavailable; refusing SOL fallback for safety"
+                    ),
+                    claim_id=claim_id,
+                )
+                if history_db and claim_id:
+                    history_db.update_claim(claim_id, "failed", error_message=result.error)
+                return result
             except RPCError as e:
                 logger.error("RPC error during SPL sweep: %s", e)
                 result = SweepResult(success=False, error=str(e), claim_id=claim_id)
@@ -1015,78 +1025,89 @@ async def execute_sweep(
                     history_db.update_claim(claim_id, "failed", error_message=str(e))
                 return result
 
-        # Fallback: SOL transfer
-        sol_balance = await get_sol_balance(client, owner)
-        reserve = config.min_sol_balance
-        transferable = sol_balance - reserve
+        if config.allow_sol_fallback:
+            sol_balance = await get_sol_balance(client, owner)
+            reserve = config.min_sol_balance
+            transferable = sol_balance - reserve
 
-        if transferable <= 0:
-            result = SweepResult(
-                success=False,
-                error=f"Insufficient SOL: {sol_balance} lamports (need {reserve} reserve)",
-                claim_id=claim_id,
-            )
-            if history_db and claim_id:
-                history_db.update_claim(claim_id, "failed", error_message=result.error)
-            return result
-
-        sweep_sol = (transferable * config.sweep_percentage) // 100
-        if sweep_sol <= 0:
-            result = SweepResult(
-                success=False,
-                error="Nothing to sweep after percentage calc",
-                claim_id=claim_id,
-            )
-            if history_db and claim_id:
-                history_db.update_claim(claim_id, "failed", error_message=result.error)
-            return result
-
-        logger.info(
-            "SOL fallback sweep: %d lamports (%.9f SOL) to %s",
-            sweep_sol,
-            sweep_sol / 1e9,
-            treasury,
-        )
-
-        ix = transfer(
-            TransferParams(
-                from_pubkey=owner,
-                to_pubkey=treasury,
-                lamports=sweep_sol,
-            )
-        )
-
-        blockhash_resp = await client.get_latest_blockhash(commitment=Confirmed)
-        tx = Transaction.new_signed_with_payer(
-            [ix], owner, [wallet_keypair], blockhash_resp.value.blockhash
-        )
-
-        if config.simulate_before_send:
-            sim_result = await simulate_sweep(client, tx, wallet_keypair)
-            if not sim_result["success"]:
+            if transferable <= 0:
                 result = SweepResult(
                     success=False,
-                    error=f"Simulation failed: {sim_result['error']}",
+                    error=f"Insufficient SOL: {sol_balance} lamports (need {reserve} reserve)",
                     claim_id=claim_id,
                 )
                 if history_db and claim_id:
-                    history_db.update_claim(claim_id, "failed", error_message=sim_result['error'])
+                    history_db.update_claim(claim_id, "failed", error_message=result.error)
                 return result
 
-        resp = await client.send_transaction(tx)
-        sig = str(resp.value)
-        logger.info("SOL sweep tx: %s", sig)
+            sweep_sol = (transferable * config.sweep_percentage) // 100
+            if sweep_sol <= 0:
+                result = SweepResult(
+                    success=False,
+                    error="Nothing to sweep after percentage calc",
+                    claim_id=claim_id,
+                )
+                if history_db and claim_id:
+                    history_db.update_claim(claim_id, "failed", error_message=result.error)
+                return result
+
+            logger.warning(
+                "SOL fallback explicitly enabled: sweeping %d lamports (%.9f SOL) to %s",
+                sweep_sol,
+                sweep_sol / 1e9,
+                treasury,
+            )
+
+            ix = transfer(
+                TransferParams(
+                    from_pubkey=owner,
+                    to_pubkey=treasury,
+                    lamports=sweep_sol,
+                )
+            )
+
+            blockhash_resp = await client.get_latest_blockhash(commitment=Confirmed)
+            tx = Transaction.new_signed_with_payer(
+                [ix], owner, [wallet_keypair], blockhash_resp.value.blockhash
+            )
+
+            if config.simulate_before_send:
+                sim_result = await simulate_sweep(client, tx, wallet_keypair)
+                if not sim_result["success"]:
+                    result = SweepResult(
+                        success=False,
+                        error=f"Simulation failed: {sim_result['error']}",
+                        claim_id=claim_id,
+                    )
+                    if history_db and claim_id:
+                        history_db.update_claim(claim_id, "failed", error_message=sim_result['error'])
+                    return result
+
+            resp = await client.send_transaction(tx)
+            sig = str(resp.value)
+            logger.info("SOL sweep tx: %s", sig)
+
+            result = SweepResult(
+                success=True,
+                signature=sig,
+                amount_swept=sweep_sol,
+                claim_id=claim_id,
+            )
+
+            if history_db and claim_id:
+                history_db.update_claim(claim_id, "success", sig)
+
+            return result
 
         result = SweepResult(
-            success=True,
-            signature=sig,
-            amount_swept=sweep_sol,
+            success=False,
+            error=(
+                "No eligible token balance to sweep, and SOL fallback is disabled for safety"
+            ),
             claim_id=claim_id,
         )
-
         if history_db and claim_id:
-            history_db.update_claim(claim_id, "success", sig)
-
+            history_db.update_claim(claim_id, "failed", error_message=result.error)
         return result
 
 

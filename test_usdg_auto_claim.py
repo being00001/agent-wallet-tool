@@ -702,6 +702,23 @@ class TestLoadKeypair:
 # Test CLI Main Function
 # ---------------------------------------------------------------------------
 
+class TestExecuteSweepSafety:
+    """Safety checks for sweep execution."""
+
+    @pytest.mark.asyncio
+    async def test_sol_fallback_disabled_by_default(self):
+        keypair = Keypair()
+        treasury = Keypair().pubkey()
+        config = ClaimConfig(allow_sol_fallback=False)
+
+        with patch("usdg_auto_claim.get_token_balance", new=AsyncMock(return_value=0)):
+            with patch("usdg_auto_claim.get_sol_balance", new=AsyncMock(return_value=10_000_000)):
+                result = await execute_sweep(keypair, treasury, config)
+
+        assert result.success is False
+        assert "SOL fallback is disabled for safety" in result.error
+
+
 class TestCLIMain:
     """Test CLI main function with mocked operations."""
 

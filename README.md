@@ -87,6 +87,12 @@ asyncio.run(main())
 pytest -q
 ```
 
+## Safety Notes
+
+- Token sweep and SOL sweep are treated separately.
+- **SOL fallback is disabled by default** in `usdg_auto_claim.py` so token transfer failures do not silently turn into SOL transfers.
+- To enable SOL fallback, it must be explicitly configured via `ClaimConfig(allow_sol_fallback=True)`.
+
 ## Notes
 
 - X / Agent Talent Show submission repo: <https://github.com/being00001/agent-wallet-tool>
