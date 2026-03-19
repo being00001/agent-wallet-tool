@@ -2,10 +2,13 @@
 
 A unified SDK for autonomous AI agents operating on Solana.
 
-This repo now combines:
+This repo is the canonical Agent Wallet family repository under the current workspace governance rules.
+
+It combines:
 - `agent_wallet.py` — wallet balances, token discovery, transaction history, Jupiter swap stubs, RPC failover
 - `dao_integration.py` — DAO discovery, proposal creation, voting, status tracking
 - `usdg_auto_claim.py` — USDG/USDC/USDT auto-sweep with retry logic, circuit breaker, fee estimation, and history tracking
+- `tools/realms_voter_proxy.py` — repo-local governance helper for Realms / Squads DAO workflows
 
 ## Modules
 
@@ -14,6 +17,7 @@ This repo now combines:
 | Wallet Management | `agent_wallet.py` | SOL/SPL balances, tx history, Jupiter quote/swap stubs |
 | DAO Integration | `dao_integration.py` | DAO discovery, proposals, voting, status tracking |
 | Auto-Claim | `usdg_auto_claim.py` | Token monitoring and treasury sweep logic |
+| Governance Helper | `tools/realms_voter_proxy.py` | Realms / Squads proposal and voting helper |
 
 ## Install
 
@@ -81,6 +85,16 @@ asyncio.run(main())
 - `examples/integrated_agent.py`
 - `examples/usdg_claim_integration.py`
 
+## Governance Helper
+
+The repository also carries a repo-local helper under `tools/` for DAO governance flows:
+
+```python
+from tools.realms_voter_proxy import vote_on_proposal, submit_proposal
+```
+
+This helper is intended for source-checkout use inside the repo rather than as a separately packaged module.
+
 ## Tests
 
 ```bash
@@ -95,7 +109,8 @@ pytest -q
 
 ## Notes
 
-- X / Agent Talent Show submission repo: <https://github.com/being00001/agent-wallet-tool>
+- Canonical remote: <https://github.com/being00001/agent-wallet-tool>
+- Legacy family clones were consolidated into this repo during the 2026-03-19 workspace cleanup.
 - This repo intentionally keeps the original flat-module layout for backward compatibility.
 
 ## License
