@@ -1,139 +1,97 @@
-# Agent Wallet Tool - USDG Auto-Claim SDK for Solana
+# Agent Wallet Tool for Solana
 
-An autonomous agent SDK that detects and claims USDG (Global Dollar by Paxos) rewards on Solana, sweeping them to a treasury wallet when balances exceed a configurable threshold.
+A unified SDK for autonomous AI agents operating on Solana.
 
-## What It Does
+This repo now combines:
+- `agent_wallet.py` — wallet balances, token discovery, transaction history, Jupiter swap stubs, RPC failover
+- `dao_integration.py` — DAO discovery, proposal creation, voting, status tracking
+- `usdg_auto_claim.py` — USDG/USDC/USDT auto-sweep with retry logic, circuit breaker, fee estimation, and history tracking
 
-This SDK enables AI agents to autonomously manage Solana wallet operations:
+## Modules
 
-1. **Monitor** a Solana wallet for incoming USDG token deposits
-2. **Detect** when the balance exceeds a configurable threshold
-3. **Sweep** tokens from the agent's operational wallet to a treasury address
-4. **Track** all claim history in a local SQLite database
+| Module | File | Description |
+|---|---|---|
+| Wallet Management | `agent_wallet.py` | SOL/SPL balances, tx history, Jupiter quote/swap stubs |
+| DAO Integration | `dao_integration.py` | DAO discovery, proposals, voting, status tracking |
+| Auto-Claim | `usdg_auto_claim.py` | Token monitoring and treasury sweep logic |
 
-## How Solana Is Used
-
-The SDK interacts directly with the Solana blockchain via RPC:
-
-- **SPL Token Operations**: Reads token account balances using `getTokenAccountBalance`, creates Associated Token Accounts (ATAs) when needed, and executes SPL token transfers
-- **Transaction Management**: Builds and signs Solana transactions with priority fee estimation, blockhash management, and confirmation polling
-- **On-chain Mints**: Targets real Solana token mints — USDG (`2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH`), USDC, and USDT
-- **Network Support**: Works on both devnet (with test mints) and mainnet-beta
-
-## How the AI Agent Operates Autonomously
-
-The `USDGClaimer` class and `monitor_and_sweep` function implement a fully autonomous claim loop:
-
-- **Continuous Monitoring**: Polls wallet balances at configurable intervals and triggers sweeps without human intervention
-- **Fault Tolerance**: Circuit breaker pattern stops operations after repeated failures, then auto-recovers after a cooldown period
-- **Retry Logic**: Exponential backoff with jitter for transient RPC errors
-- **Gas Optimization**: Estimates priority fees before submitting transactions to avoid overpaying or failing due to insufficient gas
-- **Decision Making**: The agent decides when to claim based on balance thresholds, gas costs, and circuit breaker state
-
-## Installation
+## Install
 
 ```bash
 pip install -e .
 ```
 
-Or install dependencies directly:
+Or:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Requirements
+## Requirements
 
 - Python 3.10+
-- A Solana keypair file (JSON format)
-- Access to a Solana RPC endpoint
+- Solana RPC access
+- For sweep operations: a Solana keypair JSON file
 
-## Usage
+## Quick Start
 
-### Basic: Check Claimable Balance
+### Wallet status
+
+```python
+from agent_wallet import agent_wallet_status
+
+status = agent_wallet_status(network="mainnet")
+print(status.summary())
+```
+
+### DAO actions
+
+```python
+from dao_integration import list_daos, create_proposal
+
+daos = list_daos("mainnet")
+proposal = create_proposal(
+    dao=daos[0],
+    title="Agent Collective Decision",
+    description="Example proposal",
+    proposer_wallet="AgentWallet...",
+)
+print(proposal.title)
+```
+
+### Auto-claim / sweep
 
 ```python
 import asyncio
+from solders.pubkey import Pubkey
 from usdg_auto_claim import check_claimable, ClaimConfig
 
 async def main():
     config = ClaimConfig(network="mainnet", threshold=10.0)
-    balance = await check_claimable(
-        rpc_url="https://api.mainnet-beta.solana.com",
-        wallet_pubkey="YOUR_WALLET_PUBKEY",
-        config=config,
-    )
-    print(f"Claimable: {balance.human_amount} USDG")
+    wallet = Pubkey.from_string("YOUR_WALLET")
+    claim = await check_claimable(wallet, config)
+    print(claim.balance_human)
 
 asyncio.run(main())
 ```
 
-### Autonomous Sweep Loop
+## Examples
 
-```python
-import asyncio
-from usdg_auto_claim import USDGClaimer, ClaimConfig
+- `examples/basic_usage.py`
+- `examples/integrated_agent.py`
+- `examples/usdg_claim_integration.py`
 
-async def main():
-    config = ClaimConfig(
-        network="mainnet",
-        threshold=10.0,
-        poll_interval=60,
-        reward_source="superteam_earn",
-    )
-    claimer = USDGClaimer(config)
-    await claimer.run(
-        keypair_path="./wallet.json",
-        treasury="TREASURY_PUBKEY",
-    )
+## Tests
 
-asyncio.run(main())
+```bash
+pytest -q
 ```
 
-### One-Shot Sweep
+## Notes
 
-```python
-import asyncio
-from usdg_auto_claim import execute_sweep, ClaimConfig, load_keypair
-from solders.pubkey import Pubkey
-
-async def main():
-    config = ClaimConfig(network="mainnet", threshold=5.0)
-    keypair = load_keypair("./wallet.json")
-    treasury = Pubkey.from_string("TREASURY_ADDRESS")
-
-    result = await execute_sweep(
-        rpc_url="https://api.mainnet-beta.solana.com",
-        wallet_keypair=keypair,
-        treasury=treasury,
-        config=config,
-    )
-    print(f"Swept {result.amount_swept} lamports, tx: {result.signature}")
-
-asyncio.run(main())
-```
-
-## Architecture
-
-```
-agent_wallet_tool/
-  usdg_auto_claim.py    # Core SDK: claimer, sweep logic, history DB
-  __init__.py            # Public API exports
-  examples/              # Integration examples
-  test_usdg_auto_claim.py  # Test suite
-```
-
-### Key Components
-
-| Component | Purpose |
-|-----------|---------|
-| `USDGClaimer` | Main class — manages the autonomous claim loop |
-| `ClaimConfig` | Configuration dataclass (network, threshold, fees) |
-| `ClaimHistoryDB` | SQLite-backed claim history tracking |
-| `CircuitBreaker` | Stops operations after repeated failures |
-| `PriorityFeeEstimator` | Estimates optimal transaction fees |
-| `RetryConfig` | Configurable retry with exponential backoff |
+- X / Agent Talent Show submission repo: <https://github.com/being00001/agent-wallet-tool>
+- This repo intentionally keeps the original flat-module layout for backward compatibility.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT

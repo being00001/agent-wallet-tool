@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-wallet-tool"
-version = "2.0.0"
-description = "Autonomous agent SDK for detecting and claiming USDG rewards on Solana"
+version = "2.1.0"
+description = "Autonomous agent SDK for Solana wallet ops, DAO integration, and USDG reward sweeping"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/being00001/agent_wallet_tool"
+Repository = "https://github.com/being00001/agent-wallet-tool"
 
-[tool.setuptools.packages.find]
-include = ["agent_wallet_tool*"]
+[tool.setuptools]
+py-modules = ["agent_wallet", "dao_integration", "usdg_auto_claim"]

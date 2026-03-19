@@ -189,18 +189,17 @@ class RetryConfig:
     base_delay: float = 0.5  # seconds
     max_delay: float = 30.0  # seconds
     exponential_base: float = 2.0
-    jitter: float = 0.1  # 10% jitter
+    jitter: float = 0.1  # absolute jitter in seconds
     retryable_exceptions: tuple = (RPCException, asyncio.TimeoutError, ConnectionError)
 
     def calculate_delay(self, attempt: int) -> float:
-        """Calculate delay with exponential backoff and jitter."""
+        """Calculate delay with exponential backoff and positive jitter."""
         delay = min(
             self.base_delay * (self.exponential_base ** attempt),
             self.max_delay
         )
-        # Add jitter
-        jitter_amount = delay * self.jitter
-        return delay + random.uniform(-jitter_amount, jitter_amount)
+        jitter_amount = min(self.jitter, max(0.0, self.max_delay - delay))
+        return min(self.max_delay, delay + random.uniform(0, jitter_amount))
 
 
 # ---------------------------------------------------------------------------
@@ -542,8 +541,10 @@ class ClaimConfig:
     def mint_pubkey(self) -> Pubkey:
         if self.token_mint:
             return Pubkey.from_string(self.token_mint)
+        if self.reward_source in REWARD_SOURCE_MINTS:
+            return REWARD_SOURCE_MINTS[self.reward_source]
         if self.network == "mainnet":
-            return REWARD_SOURCE_MINTS.get(self.reward_source, USDG_MINT_MAINNET)
+            return USDG_MINT_MAINNET
         return DEVNET_USDG_MINT or USDG_MINT_MAINNET
 
     @property
